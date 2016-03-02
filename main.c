@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define GETOPTS "o:i:a:p"
+#define GETOPTS "o:i:a:p:"
 static char *progname;
 static struct option long_opts[] = {
   {"outeriterations", required_argument, NULL, 'o'},
@@ -21,25 +21,32 @@ void print_usage(void) {
   fprintf(stderr, "-p --pagesize            RAM Memory Page Size (bytes)\n");
 }
 
-void initial_scan(int n, double a, double *v) {
+void initial_scan(int n, double a, double *arr) {
   for(int i = 0; i < n; ++i) {
-    v[i] = a;
+    arr[i] = a;
   }
 }
 
-void saxpy(int n, double a, double *x, double *y) {
-  for (int i = 0; i < n; ++i) {
-    y[i] = a*x[i] + y[i];
+void saxpy(int start, int end, double a, double *xarr, double *yarr) {
+  for (int i = start; i < end; ++i) {
+    yarr[i] = a*xarr[i] + yarr[i];
   }
 }
 
-void stepping_scan(int pages, int pagesize, int step, int start, double a, double *x, double *y) {
-  // Linear Page Scan
-  for (int page = start; page < pages; page+=step) {
-    int offset = page * pagesize;
-    saxpy(pagesize, a, x+offset, y+offset);
+void stepping_scan(int pages,
+                   int page_doubles,
+                   int page_step, 
+                   int start_page, 
+                   double a, 
+                   double *xarr, 
+                   double *yarr) {
+  for (int page = start_page; page < pages; page+=page_step) {
+    int page_start = page * page_doubles;
+    int page_end = page_start + page_doubles;
+    saxpy(page_start, page_end, a, xarr, yarr);
   }
 }
+
 
 int main(int argc, char *argv[]) {
   progname = argv[0];
@@ -71,31 +78,45 @@ int main(int argc, char *argv[]) {
     print_usage();
     return EXIT_FAILURE;
   }
-  printf("Starting\n");
-
+  if (pagesize % sizeof(double) != 0
+   || arraysize % sizeof(double) != 0) {
+    fprintf(stderr, "Error! pagesize(%d) and arraysize(%d) must be multiples of sizeof(double)(%lu)\n",
+        pagesize, arraysize, sizeof(double));
+    return EXIT_FAILURE;
+  }
   int doubles = arraysize / sizeof(double);
-  int pages = arraysize / pagesize;
-  double *x = malloc(arraysize);
-  double *y = malloc(arraysize);
+  int page_doubles = pagesize / sizeof(double);
+  int pages = doubles / page_doubles;
+  double *xarr = (double *) malloc(doubles * sizeof(double));
+  double *yarr = (double *) malloc(doubles * sizeof(double));
+  if (!xarr || !yarr) {
+    fprintf(stderr, "Unable to allocate arrays! Exiting\n");
+    return EXIT_FAILURE;
+  } else {
+    printf("Allocated two arrays of length %d\n", doubles);
+  }
   for (int i = 0; i < outer; ++i) {
     // Linear Touch Scan
+    printf("Linear Touch Scan\n");
     for (int j = 0; j <inner; ++j) {
-      initial_scan(doubles, 2.0, x);
-      initial_scan(doubles, 0.5, y);
+      initial_scan(doubles, 2.0, xarr);
+      initial_scan(doubles, 0.5, yarr);
     }
     // Linear Page Scan
+    printf("Linear Page Scan\n");
     for (int j = 0; j <inner; ++j) {
-      stepping_scan(pages, pagesize, 1, 0, 1.25, x, y);
+      stepping_scan(pages, page_doubles, 1, 0, 1.24, xarr, yarr);
     }
+    printf("Braided Page Scan\n");
     // Braided Stepwise Scan
     for (int j = 0; j <inner; ++j) {
-      stepping_scan(pages, pagesize, 4, 0, 1.25, x, y);
-      stepping_scan(pages, pagesize, 4, 1, 1.25, x, y);
-      stepping_scan(pages, pagesize, 4, 2, 1.25, x, y);
-      stepping_scan(pages, pagesize, 4, 3, 1.25, x, y);
+      stepping_scan(pages, page_doubles, 4, 0, 1.24, xarr, yarr);
+      stepping_scan(pages, page_doubles, 4, 1, 1.24, xarr, yarr);
+      stepping_scan(pages, page_doubles, 4, 2, 1.24, xarr, yarr);
+      stepping_scan(pages, page_doubles, 4, 3, 1.24, xarr, yarr);
     }
   }
-  free(x);
-  free(y);
+  free(xarr);
+  free(yarr);
   return EXIT_SUCCESS;
 }

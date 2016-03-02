@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -O0 -Wall -Wextra -pedantic
+CFLAGS= -O0 -std=gnu99 -Wall -Wextra -pedantic -g
 
 all: ramspank.x
 
